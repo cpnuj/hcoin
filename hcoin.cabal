@@ -15,16 +15,60 @@ extra-source-files:  README.md
                      CHANGELOG.md
 
 executable hcoin
-  hs-source-dirs:      src
-  main-is:             Main.hs
-  default-language:    Haskell2010
-  build-depends:       base >= 4.7 && < 5
-  ghc-options:         -Wall
-                       -Wcompat
-                       -Widentities
-                       -Wincomplete-record-updates
-                       -Wincomplete-uni-patterns
-                       -Wmissing-export-lists
-                       -Wmissing-home-modules
-                       -Wpartial-fields
-                       -Wredundant-constraints
+  hs-source-dirs:
+    src
+  main-is:
+    Main.hs
+  default-language:
+    Haskell2010
+  build-depends:
+    base >= 4.7 && < 5,
+    hcoin,
+    bytestring,
+    cryptohash-sha256
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-export-lists
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+
+executable test-crypto
+  hs-source-dirs:
+    tests
+  main-is:
+    TestCrypto.hs
+  default-language:
+    Haskell2010
+  build-depends:
+    base >= 4.7 && < 5,
+    hcoin,
+    bytestring,
+    cryptohash-sha256,
+    HUnit
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wmissing-home-modules
+    -Wpartial-fields
+    -Wredundant-constraints
+
+library
+  hs-source-dirs: src
+  exposed-modules:
+    Helper
+    Crypto.ECDSA
+    Crypto.Math
+  build-depends:
+    base >= 4.7 && < 5,
+    bytestring,
+    cryptohash-sha256
+  default-language:
+    Haskell2010
