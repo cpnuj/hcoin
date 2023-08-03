@@ -1,14 +1,12 @@
 name:                hcoin
 version:             0.1.0.0
--- synopsis:
--- description:
 homepage:            https://github.com/githubuser/hcoin#readme
 license:             BSD3
 license-file:        LICENSE
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2023 Author name here
-category:            Web
+author:              junp
+maintainer:          junpc97@gmail.com
+copyright:           2023 junp
+category:            Crypto
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
