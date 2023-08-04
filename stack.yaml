@@ -2,3 +2,8 @@ resolver: lts-21.4
 
 packages:
 - .
+
+extra-deps:
+  - bytestring-conversion-0.3.2
+
+allow-newer: true

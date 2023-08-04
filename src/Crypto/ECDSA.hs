@@ -4,13 +4,21 @@ module Crypto.ECDSA
     , verify
     , mkSecKey
     , genPubkey
+    , encodeInt256
+    , encPubSEC
+    , encSig
     , SecKey (..)
     , PubKey (..)
     , Signature (..)
     ) where
 
+import Helper
 import Crypto.Math
 import System.Random
+import Data.Int (Int8, Int64)
+import Data.Binary (encode)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 
 -- SEC_p256k1 curve
 curve :: Curve
@@ -42,6 +50,43 @@ genPubkey :: SecKey -> PubKey
 genPubkey (SecKey e) = case pscale curve e pbase of
     PZero -> error "zero pubkey"
     Point x y -> PubKey x y
+
+encodeInt8 :: Integral a => a -> ByteString
+encodeInt8 = BS.toStrict . encode . toInt8
+    where toInt8 :: Integral a => a -> Int8
+          toInt8 = fromIntegral
+
+encodeInt256 :: Integer -> ByteString
+encodeInt256 num = pad <> raw
+    where raw = integerToBS num
+          pad = BS.replicate (32 - BS.length raw) 0
+
+-- encode pubkey to SEC format
+encPubSEC :: Bool -> PubKey -> ByteString
+-- uncompressed
+encPubSEC False (PubKey x y) = BS.pack [0x04] <> encodeInt256 x <> encodeInt256 y
+-- compressed
+encPubSEC True (PubKey x y)
+    | even y    = BS.pack [0x02] <> encodeInt256 x
+    | otherwise = BS.pack [0x03] <> encodeInt256 x
+
+-- encode integer to DER number format
+encodeIntDER :: Integer -> ByteString
+encodeIntDER x = if BS.head bs >= 0x80 then BS.pack [0x00] <> bs else bs
+    where bs = BS.dropWhile (== 0x00) . encodeInt256 $ x
+
+-- encode signature to DER format
+encSig :: Signature -> ByteString
+encSig (Signature r s) = hmark <> blen <> bs
+    where hmark = BS.pack [0x30] -- head marker
+          vmark = BS.pack [0x02] -- value marker
+          rval  = encodeIntDER r
+          sval  = encodeIntDER s
+          rlen  = encodeInt8 (BS.length rval)
+          slen  = encodeInt8 (BS.length sval)
+          -- body and body length
+          bs    = vmark <> rlen <> rval <> vmark <> slen <> sval
+          blen  = encodeInt8 (BS.length bs)
 
 -- sign signs z with seckey and a random k
 sign :: SecKey -> Integer -> IO Signature

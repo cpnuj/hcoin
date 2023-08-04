@@ -23,7 +23,9 @@ executable hcoin
     base >= 4.7 && < 5,
     hcoin,
     random,
+    binary,
     bytestring,
+    bytestring-conversion,
     cryptohash-sha256,
     HUnit
   ghc-options:
@@ -69,6 +71,7 @@ library
     Crypto.Math
   build-depends:
     base >= 4.7 && < 5,
+    binary,
     bytestring,
     random,
     cryptohash-sha256
