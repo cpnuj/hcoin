@@ -4,8 +4,8 @@ module Main where
 
 import Test.HUnit
 
-import Helper
 import Crypto.ECDSA
+import Data.Encoding
 import Data.ByteString (ByteString)
 import Control.Monad (forM_)
 
@@ -36,7 +36,7 @@ simpleSign = TestCase
     ( do
         let sk = SecKey 12345
         let pk = genPubkey sk
-        let z = hashMsg "Programming Bitcoin!"
+        let z = bsToInteger $ hash256 "Programming Bitcoin!"
         let (Signature r s) = signk 1234567890 sk z
 
         assertEqual "public key fail" pk
@@ -83,11 +83,37 @@ testEncodeSig = TestCase $
         let o = hexEncode $ encSig sig
         assertEqual s expect o
 
+testAddressData :: [(Bool, Bool, Integer, ByteString)]
+testAddressData =
+    [ (True, False, 5002,              "mmTPbXQFxboEtNRkwfh6K51jvdtHLxGeMA")
+    , (True, True,  2020^(5::Integer), "mopVkxp8UhXqRYbCYJsbeE1h1fiF64jcoH")
+    , (False, True, 0x12345deadbeef,   "1F1Pn2y6pDb68E5nYJJeba4TLg2U7B6KF1") ]
+
+testAddress :: Test
+testAddress = TestCase $
+    forM_ testAddressData $ \x@(testnet, compress, e, expect) -> do
+        let pubkey = genPubkey $ SecKey e
+        assertEqual (show x) expect (genAddress testnet compress pubkey)
+
+testWalletData :: [(Bool, Bool, Integer, ByteString)]
+testWalletData =
+    [ (True, True, 5003, "cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN8rFTv2sfUK")
+    , (True, False, 2021^(5::Integer), "91avARGdfge8E4tZfYLoxeJ5sGBdNJQH4kvjpWAxgzczjbCwxic")
+    , (False, True, 0x54321deadbeef, "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgiuQJv1h8Ytr2S53a") ]
+
+testWallet :: Test
+testWallet = TestCase $
+    forM_ testWalletData $ \x@(testnet, compress, e, expect) -> do
+        let seckey = SecKey e
+        assertEqual (show x) expect (genWallet testnet compress seckey)
+
 tests :: Test
 tests = TestList [ TestLabel "simple verify" simpleVerify
                  , TestLabel "simple sign"   simpleSign
                  , TestLabel "encode sec"    testEncodeSEC
-                 , TestLabel "encode sig"    testEncodeSig ]
+                 , TestLabel "encode sig"    testEncodeSig
+                 , TestLabel "address"       testAddress
+                 , TestLabel "wallet"        testWallet ]
 
 main :: IO ()
 main = runTestTTAndExit tests

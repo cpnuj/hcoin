@@ -4,18 +4,19 @@ module Crypto.ECDSA
     , verify
     , mkSecKey
     , genPubkey
-    , encodeInt256
     , encPubSEC
     , encSig
+    , genAddress
+    , genWallet
     , SecKey (..)
     , PubKey (..)
     , Signature (..)
     ) where
 
-import Helper
 import Crypto.Math
+import Data.Encoding
 import System.Random
-import Data.Int (Int8, Int64)
+import Data.Int (Int8)
 import Data.Binary (encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -115,3 +116,18 @@ verify (PubKey x y) z (Signature r s) =
         PZero -> False
         Point r' _ -> r' == r
 
+-- | append checksum to given bytestring and encode in base58
+checksumB58 :: ByteString -> ByteString
+checksumB58 payload = b58Encode $ (payload <>) . BS.take 4 $ hash256 payload
+
+genAddress :: Bool -> Bool -> PubKey -> ByteString
+genAddress test compressed pubkey = checksumB58 payload
+    where prefix | test = BS.pack [0x6f] | otherwise = BS.pack [0x00]
+          h160 = hash160 $ encPubSEC compressed pubkey
+          payload = prefix <> h160
+
+genWallet :: Bool -> Bool -> SecKey -> ByteString
+genWallet test compress (SecKey e) = checksumB58 payload
+    where prefix | test = BS.pack [0xef] | otherwise = BS.pack [0x80]
+          suffix | compress = BS.pack [0x01] | otherwise = mempty
+          payload = prefix <> encodeInt256 e <> suffix

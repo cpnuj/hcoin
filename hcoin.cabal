@@ -26,7 +26,7 @@ executable hcoin
     binary,
     bytestring,
     bytestring-conversion,
-    cryptohash-sha256,
+    cryptohash,
     HUnit
   ghc-options:
     -Wall
@@ -34,7 +34,6 @@ executable hcoin
     -Widentities
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
-    -Wmissing-export-lists
     -Wmissing-home-modules
     -Wpartial-fields
     -Wredundant-constraints
@@ -51,7 +50,7 @@ executable test-crypto
     hcoin,
     random,
     bytestring,
-    cryptohash-sha256,
+    cryptohash,
     HUnit
   ghc-options:
     -Wall
@@ -59,21 +58,20 @@ executable test-crypto
     -Widentities
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
-    -Wmissing-home-modules
     -Wpartial-fields
     -Wredundant-constraints
 
 library
   hs-source-dirs: src
   exposed-modules:
-    Helper
     Crypto.ECDSA
     Crypto.Math
+    Data.Encoding
   build-depends:
     base >= 4.7 && < 5,
     binary,
     bytestring,
     random,
-    cryptohash-sha256
+    cryptohash
   default-language:
     Haskell2010
