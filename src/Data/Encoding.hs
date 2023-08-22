@@ -3,6 +3,8 @@
 module Data.Encoding where
 
 import Data.Bits
+import Data.Binary (encode)
+import Data.Int (Int8)
 import Data.Char (chr, ord)
 import Data.String (fromString)
 import Data.ByteString ( ByteString )
@@ -28,6 +30,15 @@ bsToInteger = BS.foldl f 0
 -- | Encode Integer to a big endian bytestring
 integerToBS :: Integer -> ByteString
 integerToBS = encodeAtBase [(chr 0)..] (256::Integer)
+
+-- | Decode a little endian Integer from a bytestring
+bsToIntegerLE :: ByteString -> Integer
+bsToIntegerLE = BS.foldl f 0 . BS.reverse
+    where f n c = toInteger (ord c) .|. shiftL n 8
+
+-- | Encode a little endian Integer from a bytestring
+integerToBSLE :: Integer -> ByteString
+integerToBSLE = BS.reverse . integerToBS
 
 hexTable :: [Char]
 hexTable = "0123456789abcdef"
@@ -68,3 +79,12 @@ b58Encode s = BS.replicate pad '1' <> res
 encodeAtBase :: Integral a => [Char] -> a -> a -> ByteString
 encodeAtBase table base num = fromString $ showIntAtBase base mapf num ""
     where mapf i = table !! fromIntegral i
+
+encodeInt256 :: Integer -> ByteString
+encodeInt256 num = pad <> raw
+    where raw = integerToBS num
+          pad = BS.replicate (32 - BS.length raw) (chr 0)
+
+decodeInt256 :: ByteString -> Integer
+decodeInt256 = bsToInteger
+

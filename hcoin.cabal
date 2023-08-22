@@ -21,6 +21,7 @@ executable hcoin
     Haskell2010
   build-depends:
     base >= 4.7 && < 5,
+    mtl,
     hcoin,
     random,
     binary,
@@ -67,8 +68,11 @@ library
     Crypto.ECDSA
     Crypto.Math
     Data.Encoding
+    HCoin.Transaction
+    HCoin.Script
   build-depends:
     base >= 4.7 && < 5,
+    mtl,
     binary,
     bytestring,
     random,

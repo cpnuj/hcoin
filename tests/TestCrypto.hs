@@ -65,8 +65,9 @@ testEncodeSEC = TestCase $
     forM_ encodeTestData $ \(compress, e, expect) -> do
         let s = "seckey = " <> show e
         let p = genPubkey (SecKey e)
-        let o = hexEncode $ encPubSEC compress p
+        let o = hexEncode $ encodePubSEC compress p
         assertEqual s expect o
+        assertEqual s p (decodePubSEC $ hexDecode o)
 
 encSigTestData :: [(Signature, ByteString)]
 encSigTestData =
@@ -80,8 +81,9 @@ testEncodeSig :: Test
 testEncodeSig = TestCase $
     forM_ encSigTestData $ \(sig, expect) -> do
         let s = "signature = " <> show sig
-        let o = hexEncode $ encSig sig
+        let o = hexEncode $ encodeSig sig
         assertEqual s expect o
+        assertEqual s sig (decodeSig $ hexDecode o)
 
 testAddressData :: [(Bool, Bool, Integer, ByteString)]
 testAddressData =
