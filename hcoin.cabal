@@ -68,8 +68,9 @@ library
     Crypto.ECDSA
     Crypto.Math
     Data.Encoding
-    HCoin.Transaction
-    HCoin.Script
+    HCoin.Data.Binary
+    HCoin.Data.Transaction
+    HCoin.Data.Script
   build-depends:
     base >= 4.7 && < 5,
     mtl,
