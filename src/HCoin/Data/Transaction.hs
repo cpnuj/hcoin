@@ -67,3 +67,28 @@ instance Binary Txn where
               <*> (getVarint >>= \n -> getN n)
               <*> getWord32le
 
+-- | fetch ScriptPubkey for a txn input
+-- TODO: unimplemented
+fetchScriptPubkey :: TxnIn -> Script
+fetchScriptPubkey _ = Script [OP_DUP]
+
+data SigType = SigHashAll
+
+sigTypeBS :: SigType -> BS.ByteString
+sigTypeBS SigHashAll = BS.reverse . BS.toStrict $ encode (1 :: Word32)
+
+-- | sigHash calculate the z value of a transaction input
+sigHash :: Txn -> Int -> BS.ByteString
+sigHash txn idx = hash256 bs
+    where
+        f :: Int -> TxnIn -> TxnIn
+        f i txnin =
+          if i == idx then
+              txnin { scriptSig = fetchScriptPubkey txnin }
+          else
+              txnin { scriptSig = Script [] }
+
+        inputs = zipWith f [0..] (txnInputs txn)
+        txn' = txn { txnInputs = inputs }
+
+        bs = BS.toStrict (encode txn') <> sigTypeBS SigHashAll
