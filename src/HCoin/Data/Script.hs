@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module HCoin.Data.Script where
 
 import Control.Monad.Except
@@ -6,6 +8,7 @@ import Data.Binary.Get
 import Data.Binary.Put
 import Data.ByteString ( ByteString )
 import Data.Encoding
+import Data.Data
 import Crypto.ECDSA (verify, decodePubSEC, decodeSig)
 
 import HCoin.Data.Binary
@@ -18,15 +21,22 @@ import qualified Data.ByteString as BS
 type Value = ByteString
 
 data Command = OP_PUSH Value
-             | OP_CODE Word8
-             deriving Eq
+             | OP_DUP
+             | OP_EqualVerify
+             | OP_Hash160
+             | OP_CheckSig
+             deriving (Data, Typeable, Eq)
 
 instance Show Command where
     show (OP_PUSH val)  = "OP_PUSH " <> show (hexEncode val)
-    show (OP_CODE code) = "OP_CODE " <> show code
+    show x = show $ toConstr x
 
 instance Binary Command where
-    put (OP_CODE code) = put code
+    put OP_DUP         = putWord8 0x76
+    put OP_EqualVerify = putWord8 0x88
+    put OP_Hash160     = putWord8 0xa9
+    put OP_CheckSig    = putWord8 0xac
+
     put (OP_PUSH val)  = do
         case BS.length val of
             x | 0x01 <= x && x <= 0x4b -> putWord8 (fromIntegral x)
@@ -36,15 +46,20 @@ instance Binary Command where
         putByteString val
 
     get = do
-        b <- getWord8
-        case b of
-            76 -> getWord8 >>= getValue     -- OP_PUSHDATA1
-            77 -> getWord16le >>= getValue  -- OP_PUSHDATA2
-            x | 0x01 <= x && x <= 0x4b -> getValue x
-              | otherwise -> return $ OP_CODE x
-        where getValue n = do
+        let getValue n = do
                 bs <- getByteString (fromIntegral n)
                 return $ OP_PUSH bs
+
+        let opcode 0x4c = getWord8 >>= getValue     -- OP_PUSHDATA1
+            opcode 0x4d = getWord16le >>= getValue  -- OP_PUSHDATA2
+            opcode 0x76 = return OP_DUP
+            opcode 0x88 = return OP_EqualVerify
+            opcode 0xa9 = return OP_Hash160
+            opcode 0xac = return OP_CheckSig
+            opcode x | 0x01 <= x && x <= 0x4b = getValue x
+                     | otherwise = error "invalid script code"
+
+        getWord8 >>= opcode
 
 newtype Script = Script [Command] deriving Show
 
@@ -110,23 +125,22 @@ opEqualVerify = do
     when (v1 /= v2) $ throwError "opEqualVerify fails"
 
 evalCmd :: Command -> ScriptM ()
-evalCmd (OP_PUSH v) = push v
-evalCmd (OP_CODE 0x76) = opDUP
-evalCmd (OP_CODE 0x88) = opEqualVerify
-evalCmd (OP_CODE 0xa9) = opHash160
-evalCmd (OP_CODE 0xac) = opCheckSig
-evalCmd _ = undefined
+evalCmd (OP_PUSH v)    = push v
+evalCmd OP_DUP         = opDUP
+evalCmd OP_EqualVerify = opEqualVerify
+evalCmd OP_Hash160     = opHash160
+evalCmd OP_CheckSig    = opCheckSig
 
 evalCommands :: Script -> ScriptM ()
 evalCommands (Script cmds) = forM_ cmds evalCmd
 
 p2pkhPubkey :: Value -> Script
 p2pkhPubkey h160 = Script
-    [ OP_CODE 0x76
-    , OP_CODE 0xa9
+    [ OP_DUP
+    , OP_Hash160
     , OP_PUSH h160
-    , OP_CODE 0x88
-    , OP_CODE 0xac
+    , OP_EqualVerify
+    , OP_CheckSig
     ]
 
 p2pkhSig :: Value -> Value -> Script

@@ -27,7 +27,7 @@ instance Show TxnIn where
 
 instance Binary TxnIn where
     put (TxnIn previd idx sig seqn) = do
-        put previd
+        putByteString previd
         putWord32le idx
         put sig
         putWord32le seqn
@@ -58,19 +58,12 @@ data Txn = Txn
 instance Binary Txn where
     put (Txn ver inputs outputs locktime) = do
         putWord32le ver
-        putList inputs
-        putList outputs
+        putList' inputs
+        putList' outputs
         putWord32le locktime
 
     get = Txn <$> getWord32le
               <*> (getVarint >>= \n -> getN n)
               <*> (getVarint >>= \n -> getN n)
               <*> getWord32le
-
-getN :: (Integral a, Binary b) => a -> Get [b]
-getN 0 = return []
-getN n = do
-    x <- get
-    xs <- getN (n - 1)
-    return $ x:xs
 

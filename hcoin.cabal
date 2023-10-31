@@ -28,6 +28,7 @@ executable hcoin
     bytestring,
     bytestring-conversion,
     cryptohash,
+    generic-deriving,
     HUnit
   ghc-options:
     -Wall
@@ -52,6 +53,7 @@ executable test-crypto
     random,
     bytestring,
     cryptohash,
+    generic-deriving,
     HUnit
   ghc-options:
     -Wall
@@ -77,6 +79,7 @@ library
     binary,
     bytestring,
     random,
-    cryptohash
+    cryptohash,
+    generic-deriving
   default-language:
     Haskell2010

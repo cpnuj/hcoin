@@ -34,3 +34,14 @@ getTillEmpty = do
         x <- get
         xs <- getTillEmpty
         return $ x:xs
+
+getN :: (Integral a, Binary b) => a -> Get [b]
+getN 0 = return []
+getN n = do
+    x <- get
+    xs <- getN (n - 1)
+    return $ x:xs
+
+putList' :: Binary a => [a] -> Put
+putList' xs = putVarint (length xs) >> mapM_ put xs
+
