@@ -64,11 +64,8 @@ instance Binary Command where
 newtype Script = Script [Command] deriving Show
 
 instance Binary Script where
-    put (Script cmds) = putVarBytes $ foldMap (BS.toStrict . encode) cmds
-    get = do
-        bs <- BS.fromStrict <$> getVarBytes
-        let cmds = runGet getTillEmpty bs
-        return $ Script cmds
+    put (Script cmds) = mapM_ put cmds
+    get = Script <$> getTillEmpty
 
 data Env = Env
     { envZ     :: Integer

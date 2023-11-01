@@ -7,7 +7,6 @@ import Data.Encoding
 
 import HCoin.Data.Script
 import HCoin.Data.Binary
-
 import qualified Data.ByteString as BS
 
 data TxnIn = TxnIn
@@ -29,12 +28,12 @@ instance Binary TxnIn where
     put (TxnIn previd idx sig seqn) = do
         putByteString previd
         putWord32le idx
-        put sig
+        putScript sig
         putWord32le seqn
 
     get = TxnIn <$> getByteString 32
                 <*> getWord32le
-                <*> get
+                <*> getScript
                 <*> getWord32le
 
 data TxnOut = TxnOut
@@ -44,8 +43,8 @@ data TxnOut = TxnOut
     deriving Show
 
 instance Binary TxnOut where
-    put (TxnOut amt pubkey) = putWord64le amt >> put pubkey
-    get = TxnOut <$> getWord64le <*> get
+    put (TxnOut amt pubkey) = putWord64le amt >> putScript pubkey
+    get = TxnOut <$> getWord64le <*> getScript
 
 data Txn = Txn
     { txnVersion  :: Word32
@@ -67,28 +66,9 @@ instance Binary Txn where
               <*> (getVarint >>= \n -> getN n)
               <*> getWord32le
 
--- | fetch ScriptPubkey for a txn input
--- TODO: unimplemented
-fetchScriptPubkey :: TxnIn -> Script
-fetchScriptPubkey _ = Script [OP_DUP]
+getScript :: Get Script
+getScript = decode . BS.fromStrict <$> getVarBytes
 
-data SigType = SigHashAll
+putScript :: Script -> Put
+putScript = putVarBytes . BS.toStrict . encode
 
-sigTypeBS :: SigType -> BS.ByteString
-sigTypeBS SigHashAll = BS.reverse . BS.toStrict $ encode (1 :: Word32)
-
--- | sigHash calculate the z value of a transaction input
-sigHash :: Txn -> Int -> BS.ByteString
-sigHash txn idx = hash256 bs
-    where
-        f :: Int -> TxnIn -> TxnIn
-        f i txnin =
-          if i == idx then
-              txnin { scriptSig = fetchScriptPubkey txnin }
-          else
-              txnin { scriptSig = Script [] }
-
-        inputs = zipWith f [0..] (txnInputs txn)
-        txn' = txn { txnInputs = inputs }
-
-        bs = BS.toStrict (encode txn') <> sigTypeBS SigHashAll
