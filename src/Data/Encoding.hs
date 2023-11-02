@@ -3,8 +3,7 @@
 module Data.Encoding where
 
 import Data.Bits
-import Data.Binary (encode)
-import Data.Int (Int8)
+import Data.List (elemIndex)
 import Data.Char (chr, ord)
 import Data.String (fromString)
 import Data.ByteString ( ByteString )
@@ -69,12 +68,21 @@ b58Table :: [Char]
 b58Table = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 b58Rev :: Char -> Integer
-b58Rev = undefined
+b58Rev c = case elemIndex c b58Table of
+            Just i -> fromIntegral i
+            _ -> error "invalid base58 char"
+
+b58ToInteger :: ByteString -> Integer
+b58ToInteger = BS.foldl f 0
+    where f n c = b58Rev c + n * 58
 
 b58Encode :: ByteString -> ByteString
 b58Encode s = BS.replicate pad '1' <> res
     where res = encodeAtBase b58Table (58::Integer) (bsToInteger s)
           pad = BS.length $ BS.takeWhile (== chr 0) s -- padding '1'
+
+b58Decode :: ByteString -> ByteString
+b58Decode = integerToBS . b58ToInteger
 
 encodeAtBase :: Integral a => [Char] -> a -> a -> ByteString
 encodeAtBase table base num = fromString $ showIntAtBase base mapf num ""
