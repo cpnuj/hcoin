@@ -6,54 +6,32 @@ module HCoin.BlockCypherAPI where
 
 import Data.Aeson
 import Data.Proxy
+import Data.Encoding (hexDecode)
 import Network.HTTP.Client     (newManager)
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Servant.API
 import Servant.Client
 import Control.Applicative
 import HCoin.Data.Transaction
-import qualified Data.Binary as Binary
+
+import qualified Data.Binary           as Binary
 import qualified Data.ByteString       as BS
 import qualified Data.ByteString.Char8 as BSCH
-import Data.Encoding (hexDecode)
 
-data TxnOutputResponse = TxnOutputResponse
-    { value  :: Int
-    , script :: String
-    }
-    deriving Show
-
-instance FromJSON TxnOutputResponse where
-    parseJSON (Object v) = TxnOutputResponse <$> v .: "value" <*> v .: "script"
-    parseJSON _ = empty
-
-newtype TxnResponse = TxnResponse
-    { outputs :: [TxnOutputResponse] } deriving Show
+newtype TxnResponse = TxnResponse { hex :: String }
 
 instance FromJSON TxnResponse where
-    parseJSON (Object v) = TxnResponse <$> v .: "outputs"
+    parseJSON (Object v) = TxnResponse <$> v .: "hex"
     parseJSON _ = empty
 
 -- https://api.blockcypher.com/v1/btc/test3/txs/18bc926d5c9824d9c5b0adc6718e8b1e28c028686a763be124f145e7b1003973?limit=50&includeHex=true
 type TxnAPI = "v1" :> "btc" :> "test3" :> "txs"
+-- type TxnAPI = "v1" :> "btc" :> "main" :> "txs"
            :> Capture "txs" String
+           :> QueryParam "includeHex" Bool
            :> Get '[JSON] TxnResponse
 
-resp2TxnOut :: TxnOutputResponse -> TxnOut
-resp2TxnOut (TxnOutputResponse amt sig) = TxnOut amt' sig'
-    where amt' = fromIntegral amt
-          sig' = Binary.decode . BS.fromStrict . hexDecode . BSCH.pack $ sig
-
--- | FIXME: fully implemet
-resp2Txn :: TxnResponse -> Txn
-resp2Txn resp = Txn
-    { txnVersion  = 0
-    , txnInputs   = []
-    , txnOutputs  = map resp2TxnOut $ outputs resp
-    , txnLocktime = 0
-    }
-
-txnCli :: String -> ClientM TxnResponse
+txnCli :: String -> Maybe Bool -> ClientM TxnResponse
 txnCli = client (Proxy :: Proxy TxnAPI)
 
 run :: ClientM a -> IO a
@@ -65,5 +43,9 @@ run cli = do
         Right r -> return r
 
 fetchTxn :: String -> IO Txn
-fetchTxn txnid = resp2Txn <$> (run . txnCli $ txnid)
+fetchTxn txnid = do
+    TxnResponse s <- run $ txnCli txnid (Just True)
+    let x :: Txn
+        x = Binary.decode (BS.fromStrict . hexDecode. BSCH.pack $ s)
+    return x
 

@@ -1,4 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module HCoin.Data.Transaction where
+
+import Control.Lens
 
 import Data.Binary
 import Data.Binary.Get
@@ -9,14 +13,22 @@ import HCoin.Data.Script
 import HCoin.Data.Binary
 import qualified Data.ByteString as BS
 
+getScript :: Get Script
+getScript = decode . BS.fromStrict <$> getVarBytes
+
+putScript :: Script -> Put
+putScript = putVarBytes . BS.toStrict . encode
+
 type TxnID = BS.ByteString
 
 data TxnIn = TxnIn
-    { prevTxnID  :: TxnID
-    , prevTxnIdx :: Word32
-    , scriptSig  :: Script
-    , sequence   :: Word32
+    { _prevTxnID  :: TxnID
+    , _prevTxnIdx :: Word32
+    , _scriptSig  :: Script
+    , _sequence   :: Word32
     }
+
+makeLenses ''TxnIn
 
 instance Show TxnIn where
     show (TxnIn previd idx sig seqn) =
@@ -39,22 +51,26 @@ instance Binary TxnIn where
                 <*> getWord32le
 
 data TxnOut = TxnOut
-    { amount       :: Word64
-    , scriptPubKey :: Script
+    { _amount       :: Word64
+    , _scriptPubKey :: Script
     }
     deriving Show
+
+makeLenses ''TxnOut
 
 instance Binary TxnOut where
     put (TxnOut amt pubkey) = putWord64le amt >> putScript pubkey
     get = TxnOut <$> getWord64le <*> getScript
 
 data Txn = Txn
-    { txnVersion  :: Word32
-    , txnInputs   :: [TxnIn]
-    , txnOutputs  :: [TxnOut]
-    , txnLocktime :: Word32
+    { _txnVersion  :: Word32
+    , _txnInputs   :: [TxnIn]
+    , _txnOutputs  :: [TxnOut]
+    , _txnLocktime :: Word32
     }
     deriving Show
+
+makeLenses ''Txn
 
 instance Binary Txn where
     put (Txn ver inputs outputs locktime) = do
@@ -68,21 +84,11 @@ instance Binary Txn where
               <*> (getVarint >>= \n -> getN n)
               <*> getWord32le
 
-getScript :: Get Script
-getScript = decode . BS.fromStrict <$> getVarBytes
-
-putScript :: Script -> Put
-putScript = putVarBytes . BS.toStrict . encode
-
 appendInput :: Txn -> TxnIn -> Txn
-appendInput txn txnin =
-    let inputs = txnInputs txn in
-    txn { txnInputs = inputs <> [txnin] }
+appendInput txn txnin = over txnInputs (++ [txnin]) txn
 
 appendOutput :: Txn -> TxnOut -> Txn
-appendOutput txn txnout =
-    let outputs = txnOutputs txn in
-    txn { txnOutputs = outputs <> [txnout] }
+appendOutput txn txnout = over txnOutputs (++ [txnout]) txn
 
 txnEmptyV1 :: Txn
 txnEmptyV1 = Txn 1 [] [] 0

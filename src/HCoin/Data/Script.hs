@@ -113,7 +113,9 @@ opCheckSig = do
     pubkey <- pop
     sig    <- pop
 
-    if verify (decodePubSEC pubkey) z (decodeSig sig) then
+    let der = BS.dropEnd 1 sig
+
+    if verify (decodePubSEC pubkey) z (decodeSig der) then
         push $ integerToBS 1
     else
         push $ integerToBS 0
@@ -148,8 +150,8 @@ p2pkhPubkey h160 = Script
 p2pkhSig' :: Value -> Value -> Script
 p2pkhSig' sig sec = Script [OP_PUSH sig, OP_PUSH sec]
 
-p2pkhSig :: Signature -> PubKey -> Script
-p2pkhSig sig pubkey = p2pkhSig' (encodeSig sig) (encodePubSEC False pubkey)
+p2pkhSig :: Signature -> Word8 -> PubKey -> Script
+p2pkhSig sig hashtype pubkey = p2pkhSig' (encodeSig sig <> BS.toStrict (encode hashtype)) (encodePubSEC False pubkey)
 
 runScript :: Integer -> Script -> Either String ()
 runScript z cmds =
