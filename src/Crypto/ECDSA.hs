@@ -9,6 +9,7 @@ module Crypto.ECDSA
     , encodeSig
     , decodeSig
     , genAddress
+    , h160FromAddress
     , genWallet
     , SecKey (..)
     , PubKey (..)
@@ -151,11 +152,23 @@ verify (PubKey x y) z (Signature r s) =
 checksumB58 :: ByteString -> ByteString
 checksumB58 payload = b58Encode $ (payload <>) . BS.take 4 $ hash256 payload
 
-genAddress :: Bool -> Bool -> PubKey -> ByteString
+type Address = ByteString
+
+genAddress :: Bool -> Bool -> PubKey -> Address
 genAddress test compressed pubkey = checksumB58 payload
     where prefix | test = BS.pack [0x6f] | otherwise = BS.pack [0x00]
           h160 = hash160 $ encodePubSEC compressed pubkey
           payload = prefix <> h160
+
+-- | h160FromAddress get the hash160 of pubkey from an address
+h160FromAddress :: Address -> ByteString
+h160FromAddress addr
+    | checksum /= BS.take 4 (hash256 payload) = error "bad address"
+    | otherwise = h160
+    where raw  = b58Decode addr
+          h160 = BS.drop 1 payload      -- drop net byte from payload
+          payload  = BS.dropEnd 4 raw
+          checksum = BS.takeEnd 4 raw
 
 genWallet :: Bool -> Bool -> SecKey -> ByteString
 genWallet test compress (SecKey e) = checksumB58 payload

@@ -9,7 +9,7 @@ import Data.Binary.Put
 import Data.ByteString ( ByteString )
 import Data.Encoding
 import Data.Data
-import Crypto.ECDSA (verify, decodePubSEC, decodeSig)
+import Crypto.ECDSA
 
 import HCoin.Data.Binary
 
@@ -63,6 +63,9 @@ instance Binary Command where
 
 newtype Script = Script [Command] deriving Show
 
+instance Semigroup Script where
+    (Script cmds) <> (Script cmds') = Script $ cmds <> cmds'
+
 instance Binary Script where
     put (Script cmds) = mapM_ put cmds
     get = Script <$> getTillEmpty
@@ -100,7 +103,9 @@ opHash256 = do
     push $ hash256 bs
 
 opHash160 :: ScriptM ()
-opHash160 = undefined
+opHash160 = do
+    pubkey <- pop
+    push $ hash160 pubkey
 
 opCheckSig :: ScriptM ()
 opCheckSig = do
@@ -140,8 +145,11 @@ p2pkhPubkey h160 = Script
     , OP_CheckSig
     ]
 
-p2pkhSig :: Value -> Value -> Script
-p2pkhSig sig sec = Script [OP_PUSH sig, OP_PUSH sec]
+p2pkhSig' :: Value -> Value -> Script
+p2pkhSig' sig sec = Script [OP_PUSH sig, OP_PUSH sec]
+
+p2pkhSig :: Signature -> PubKey -> Script
+p2pkhSig sig pubkey = p2pkhSig' (encodeSig sig) (encodePubSEC False pubkey)
 
 runScript :: Integer -> Script -> Either String ()
 runScript z cmds =
@@ -151,5 +159,5 @@ runScript z cmds =
     case res of
         Left e -> Left e
         _ -> case envStack env of
-                [x] -> if bsToIntegerLE x == 0 then Right () else Left "invalid script"
+                [x] -> if bsToIntegerLE x == 1 then Right () else Left "invalid script"
                 _ -> Left "there should be only 1 value after runScript"
