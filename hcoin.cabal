@@ -26,6 +26,7 @@ executable hcoin
     random,
     binary,
     bytestring,
+    base16-bytestring,
     bytestring-conversion,
     cryptohash,
     containers,
@@ -59,6 +60,7 @@ executable test-crypto
     hcoin,
     random,
     bytestring,
+    base16-bytestring,
     cryptohash,
     generic-deriving,
     HUnit
@@ -87,6 +89,7 @@ library
     mtl,
     binary,
     bytestring,
+    base16-bytestring,
     random,
     cryptohash,
     containers,

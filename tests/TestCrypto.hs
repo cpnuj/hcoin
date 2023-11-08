@@ -8,6 +8,7 @@ import Crypto.ECDSA
 import Data.Encoding
 import Data.ByteString (ByteString)
 import Control.Monad (forM_)
+import qualified Data.ByteString.Base16 as Base16
 
 simpleVerify :: Test
 simpleVerify = TestCase
@@ -65,7 +66,7 @@ testEncodeSEC = TestCase $
     forM_ encodeTestData $ \(compress, e, expect) -> do
         let s = "seckey = " <> show e
         let p = genPubkey (SecKey e)
-        let o = hexEncode $ encodePubSEC compress p
+        let o = Base16.encode $ encodePubSEC compress p
         assertEqual s expect o
         assertEqual s p (decodePubSEC $ hexDecode o)
 
@@ -81,7 +82,7 @@ testEncodeSig :: Test
 testEncodeSig = TestCase $
     forM_ encSigTestData $ \(sig, expect) -> do
         let s = "signature = " <> show sig
-        let o = hexEncode $ encodeSig sig
+        let o = Base16.encode $ encodeSig sig
         assertEqual s expect o
         assertEqual s sig (decodeSig $ hexDecode o)
 
