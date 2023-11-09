@@ -1,8 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Numeric.Positive
-    ( PositiveLe
-    , PositiveBe
+    ( PositiveLe(..)
+    , PositiveBe(..)
     , Positive
     ) where
 

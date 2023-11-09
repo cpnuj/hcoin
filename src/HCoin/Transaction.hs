@@ -5,6 +5,7 @@ module HCoin.Transaction where
 import Crypto.ECDSA
 import Data.Binary (encode, decode)
 import Data.Encoding
+import Numeric.Positive
 import HCoin.Data.Script
 import HCoin.Data.Transaction
 
@@ -61,7 +62,9 @@ sighash txn idx = do
     let txn' = txn { _txnInputs = inputs'' }
     let bs = BS.toStrict (encode txn') <> sighashAll
 
-    return $ bsToInteger (hash256 bs)
+    let x = decode . BS.fromStrict $ hash256 bs :: PositiveBe
+
+    return $ fromIntegral x
 
 signInput :: SecKey -> Txn -> Int -> TxnFetcherT Txn
 signInput seckey txn idx = do

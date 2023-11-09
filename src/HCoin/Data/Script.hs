@@ -10,6 +10,7 @@ import Data.ByteString ( ByteString )
 import Data.Encoding
 import Data.Data
 import Crypto.ECDSA
+import Numeric.Positive
 
 import HCoin.Data.Binary
 
@@ -17,6 +18,7 @@ import Control.Monad.State (runState)
 import qualified Control.Monad.State as State
 
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 
 type Value = ByteString
 
@@ -91,6 +93,9 @@ pop = do
 push :: Value -> ScriptM ()
 push val = State.modify $ \env -> env { envStack = val:envStack env }
 
+pushlazy :: LBS.ByteString -> ScriptM ()
+pushlazy = push . BS.toStrict
+
 opDUP :: ScriptM ()
 opDUP = do
     val <- pop
@@ -115,10 +120,10 @@ opCheckSig = do
 
     let der = BS.dropEnd 1 sig
 
-    if verify (decodePubSEC pubkey) z (decodeSig der) then
-        push $ integerToBS 1
+    if verify (decodePubKey pubkey) z (decode . BS.fromStrict $ der) then
+        pushlazy $ encode (1 :: PositiveLe)
     else
-        push $ integerToBS 0
+        pushlazy $ encode (0 :: PositiveLe)
 
     return ()
 
@@ -151,7 +156,8 @@ p2pkhSig' :: Value -> Value -> Script
 p2pkhSig' sig sec = Script [OP_PUSH sig, OP_PUSH sec]
 
 p2pkhSig :: Signature -> Word8 -> PubKey -> Script
-p2pkhSig sig hashtype pubkey = p2pkhSig' (encodeSig sig <> BS.toStrict (encode hashtype)) (encodePubSEC False pubkey)
+p2pkhSig sig hashtype pubkey = p2pkhSig'
+    (BS.toStrict $ encode sig <> encode hashtype) (BS.toStrict $ encode pubkey)
 
 runScript :: Integer -> Script -> Either String ()
 runScript z cmds =
@@ -161,5 +167,8 @@ runScript z cmds =
     case res of
         Left e -> Left e
         _ -> case envStack env of
-                [x] -> if bsToIntegerLE x == 1 then Right () else Left "invalid script"
+                [x] -> case decode (BS.fromStrict x) :: PositiveLe of
+                        PositiveLe 1 -> Right ()
+                        _ -> Left "invalid script"
                 _ -> Left "there should be only 1 value after runScript"
+

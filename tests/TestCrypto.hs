@@ -4,10 +4,13 @@ module Main where
 
 import Test.HUnit
 
+import Data.Binary
 import Crypto.ECDSA
 import Data.Encoding
 import Data.ByteString (ByteString)
 import Control.Monad (forM_)
+import Numeric.Positive
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as Base16
 
 simpleVerify :: Test
@@ -37,8 +40,8 @@ simpleSign = TestCase
     ( do
         let sk = SecKey 12345
         let pk = genPubkey sk
-        let z = bsToInteger $ hash256 "Programming Bitcoin!"
-        let (Signature r s) = signk 1234567890 sk z
+        let z = decode . BS.fromStrict $ hash256 "Programming Bitcoin!" :: PositiveBe
+        let (Signature r s) = signk 1234567890 sk (fromIntegral z)
 
         assertEqual "public key fail" pk
             (PubKey 0xf01d6b9018ab421dd410404cb869072065522bf85734008f105cf385a023a80f
@@ -66,9 +69,9 @@ testEncodeSEC = TestCase $
     forM_ encodeTestData $ \(compress, e, expect) -> do
         let s = "seckey = " <> show e
         let p = genPubkey (SecKey e)
-        let o = Base16.encode $ encodePubSEC compress p
+        let o = Base16.encode $ encodePubKey compress p
         assertEqual s expect o
-        assertEqual s p (decodePubSEC $ hexDecode o)
+        assertEqual s p (decodePubKey $ hexDecode o)
 
 encSigTestData :: [(Signature, ByteString)]
 encSigTestData =
@@ -82,9 +85,9 @@ testEncodeSig :: Test
 testEncodeSig = TestCase $
     forM_ encSigTestData $ \(sig, expect) -> do
         let s = "signature = " <> show sig
-        let o = Base16.encode $ encodeSig sig
+        let o = Base16.encode . BS.toStrict $ encode sig
         assertEqual s expect o
-        assertEqual s sig (decodeSig $ hexDecode o)
+        assertEqual s sig (decode . BS.fromStrict $ hexDecode o)
 
 testAddressData :: [(Bool, Bool, Integer, ByteString)]
 testAddressData =

@@ -4,10 +4,8 @@ module Crypto.ECDSA
     , verify
     , mkSecKey
     , genPubkey
-    , encodePubSEC
-    , decodePubSEC
-    , encodeSig
-    , decodeSig
+    , encodePubKey
+    , decodePubKey
     , genAddress
     , h160FromAddress
     , genWallet
@@ -24,7 +22,11 @@ import Data.Binary.Get
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
-import Data.Binary.Put (putByteString, runPut)
+import Data.Binary.Put (putByteString, runPut, putLazyByteString)
+import Data.WideWord (Word256)
+import Numeric.Positive
+
+--------------------------------------------------------------------------------
 
 -- SEC_p256k1 curve
 curve :: Curve
@@ -43,83 +45,121 @@ pbase = Point
 n :: Integer
 n  = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 
--- | Signature is an ECDSA signature
---   Signature r s
-data Signature = Signature Integer Integer deriving (Eq, Show)
 
--- | SecKey is an ECDSA private key
-newtype SecKey = SecKey Integer deriving (Eq, Show)
+-- -----------------------------------------------------------------------------
+-- | serialization utils
+--
 
--- | PubKey represents an ECDSA public key
---   PubKey x y, where (x,y) is a point on curve
-data PubKey = PubKey Integer Integer deriving (Eq, Show)
+putWord256 :: Word256 -> Put
+putWord256 = putLazyByteString . encode
 
-mkSecKey :: Integer -> SecKey
-mkSecKey = SecKey . (`mod` n)
-
-genPubkey :: SecKey -> PubKey
-genPubkey (SecKey e) = case pscale curve e pbase of
-    PZero -> error "zero pubkey"
-    Point x y -> PubKey x y
-
--- encode pubkey to SEC format
-encodePubSEC :: Bool -> PubKey -> ByteString
--- uncompressed
-encodePubSEC False (PubKey x y) = BS.pack [0x04] <> encodeInt256 x <> encodeInt256 y
--- compressed
-encodePubSEC True (PubKey x y)
-    | even y    = BS.pack [0x02] <> encodeInt256 x
-    | otherwise = BS.pack [0x03] <> encodeInt256 x
-
-getPubSEC :: Get PubKey
-getPubSEC = do
-    header <- getWord8
-    r <- decodeInt256 <$> getByteString 32
-    s <- case header of
-            0x02 -> return $ fst $ presolve curve r -- even
-            0x03 -> return $ snd $ presolve curve r -- odd
-            0x04 -> decodeInt256 <$> getByteString 32
-            _ -> error "invalid SEC form"
-    return $ PubKey r s
-
-decodePubSEC :: ByteString -> PubKey
-decodePubSEC bs = runGet getPubSEC $ LBS.fromStrict bs
+getWord256 :: Get Word256
+getWord256 = decode <$> getLazyByteString 32
 
 -- encode integer to DER number format
 encodeIntDER :: Integer -> ByteString
-encodeIntDER x = if BS.head bs >= 0x80 then BS.cons 0x00 bs else bs
-    where bs = integerToBS x
+encodeIntDER x
+    | BS.head bs >= 0x80 = BS.cons 0x00 bs
+    | otherwise = bs
+    where bs = BS.toStrict $ encode (fromIntegral x :: PositiveBe)
 
--- | encode signature to DER format
-encodeSig :: Signature -> ByteString
-encodeSig s = LBS.toStrict $ runPut $ putSig s
+-- -----------------------------------------------------------------------------
+-- | Signature r s is an ECDSA signature
+--
+data Signature = Signature Integer Integer deriving (Eq, Show)
 
-putSig :: Signature -> Put
-putSig (Signature r s) = do
-    let marker = BS.pack [0x02]
-    let rbs = encodeIntDER r
-    let sbs = encodeIntDER s
-    let rlen = fromIntegral $ BS.length rbs :: Word8
-    let slen = fromIntegral $ BS.length sbs :: Word8
-    let payload = marker <> BS.cons rlen rbs <> marker <> BS.cons slen sbs
-    putWord8 0x30 -- header
-    putWord8 $ fromIntegral $ BS.length payload
-    putByteString payload
+instance Binary Signature where
 
-getSig :: Get Signature
-getSig = do
-    _ <- getWord8 -- start
-    _ <- getWord8 -- blen
-    _ <- getWord8 -- marker
-    rlen <- getWord8
-    r <- bsToInteger <$> getByteString (fromIntegral rlen)
-    _ <- getWord8 -- marker
-    slen <- getWord8
-    s <- bsToInteger <$> getByteString (fromIntegral slen)
-    return $ Signature r s
+    put (Signature r s) = do
+        let marker = BS.pack [0x02]
+        let rbs = encodeIntDER r
+        let sbs = encodeIntDER s
+        let rlen = fromIntegral $ BS.length rbs :: Word8
+        let slen = fromIntegral $ BS.length sbs :: Word8
+        let payload = marker <> BS.cons rlen rbs <> marker <> BS.cons slen sbs
+        putWord8 0x30 -- header
+        putWord8 $ fromIntegral $ BS.length payload
+        putByteString payload
 
-decodeSig :: ByteString -> Signature
-decodeSig bs = runGet getSig $ LBS.fromStrict bs
+    get = do
+        _ <- getWord8 -- start
+        _ <- getWord8 -- blen
+
+        _ <- getWord8 -- marker
+        rlen <- fromIntegral <$> getWord8
+        r <- decode <$> getLazyByteString rlen :: Get PositiveBe
+
+        _ <- getWord8 -- marker
+        slen <- fromIntegral <$> getWord8
+        s <- decode <$> getLazyByteString slen :: Get PositiveBe
+
+        return $ Signature (fromIntegral r) (fromIntegral s)
+
+-- -----------------------------------------------------------------------------
+-- | SecKey is an ECDSA private key
+--
+
+newtype SecKey = SecKey Integer deriving (Eq, Show)
+
+-- -----------------------------------------------------------------------------
+-- | PubKey x y represents an ECDSA public key, where (x,y) is a point on curve
+--
+
+data PubKey = PubKey Integer Integer deriving (Eq, Show)
+
+instance Binary PubKey where
+
+    -- put uncompressed format of PubKey, for compressed format, see
+    -- PubkeyCompressed
+    put (PubKey x y) = do
+        putWord8 0x04
+        putWord256 $ fromIntegral x
+        putWord256 $ fromIntegral y
+
+    get = getPubKey
+
+newtype PubkeyCompressed = PubkeyCompressed { unPubkey :: PubKey } deriving (Eq, Show)
+
+instance Binary PubkeyCompressed where
+
+    put p | even y    = putWord8 0x02 >> putWord256 (fromIntegral x)
+          | otherwise = putWord8 0x03 >> putWord256 (fromIntegral x)
+        where PubKey x y = unPubkey p
+
+    get = PubkeyCompressed <$> getPubKey
+
+putPubKey :: Bool -> PubKey -> Put
+-- compressed
+putPubKey True (PubKey x y)  = do
+    if even y then
+        putWord8 0x02
+    else
+        putWord8 0x03
+    -- put x
+    putWord256 $ fromIntegral x
+-- uncompressed
+putPubKey False (PubKey x y) = do
+    putWord8 0x04
+    putWord256 $ fromIntegral x
+    putWord256 $ fromIntegral y
+
+getPubKey :: Get PubKey
+getPubKey = do
+    header <- getWord8
+    r <- fromIntegral <$> getWord256
+    s <- case header of
+            0x02 -> return $ fst $ presolve curve r -- even
+            0x03 -> return $ snd $ presolve curve r -- odd
+            0x04 -> fromIntegral <$> getWord256
+            _ -> error "invalid SEC form"
+    return $ PubKey r s
+
+-- encode pubkey to SEC format
+encodePubKey :: Bool -> PubKey -> ByteString
+encodePubKey compress pubkey = BS.toStrict . runPut $ putPubKey compress pubkey
+
+decodePubKey :: ByteString -> PubKey
+decodePubKey bs = runGet getPubKey $ LBS.fromStrict bs
 
 -- sign signs z with seckey and a random k
 sign :: SecKey -> Integer -> IO Signature
@@ -148,6 +188,14 @@ verify (PubKey x y) z (Signature r s) =
         PZero -> False
         Point r' _ -> r' == r
 
+mkSecKey :: Integer -> SecKey
+mkSecKey = SecKey . (`mod` n)
+
+genPubkey :: SecKey -> PubKey
+genPubkey (SecKey e) = case pscale curve e pbase of
+    PZero -> error "zero pubkey"
+    Point x y -> PubKey x y
+
 -- | append checksum to given bytestring and encode in base58
 checksumB58 :: ByteString -> ByteString
 checksumB58 payload = b58Encode $ (payload <>) . BS.take 4 $ hash256 payload
@@ -157,7 +205,7 @@ type Address = ByteString
 genAddress :: Bool -> Bool -> PubKey -> Address
 genAddress test compressed pubkey = checksumB58 payload
     where prefix | test = BS.pack [0x6f] | otherwise = BS.pack [0x00]
-          h160 = hash160 $ encodePubSEC compressed pubkey
+          h160 = hash160 $ encodePubKey compressed pubkey
           payload = prefix <> h160
 
 -- | h160FromAddress get the hash160 of pubkey from an address
