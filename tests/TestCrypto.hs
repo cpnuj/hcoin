@@ -69,7 +69,9 @@ testEncodeSEC = TestCase $
     forM_ encodeTestData $ \(compress, e, expect) -> do
         let s = "seckey = " <> show e
         let p = genPubkey (SecKey e)
-        let o = Base16.encode $ encodePubKey compress p
+        let sec | compress  = encode (CompressedPubKey p)
+                | otherwise = encode p
+        let o = Base16.encode . BS.toStrict $ sec
         assertEqual s expect o
         assertEqual s p (decodePubKey $ hexDecode o)
 
