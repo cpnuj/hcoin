@@ -143,52 +143,53 @@ data Env = Env
     }
     deriving Show
 
-type ScriptM = ExceptT String (State Env)
+type ScriptT = ExceptT String (State Env)
+type ScriptM = ScriptT ()
 
-pop :: ScriptM Value
+pop :: ScriptT Value
 pop = do
     stack <- gets envStack
     when (null stack) $ throwError "pop on empty stack"
     modify $ \env -> env { envStack = tail stack }
     return $ head stack
 
-popn :: Integer -> ScriptM [Value]
+popn :: Integer -> ScriptT [Value]
 popn = go []
     where go xs 0 = return xs
           go xs i = pop >>= \x -> go (xs <> [x]) (i-1)
 
-push :: Value -> ScriptM ()
+push :: Value -> ScriptM
 push val = modify $ \env -> env { envStack = val:envStack env }
 
-popnum :: ScriptM Integer
+popnum :: ScriptT Integer
 popnum = decode . BS.fromStrict <$> pop
 
-pushnum :: Integer -> ScriptM ()
+pushnum :: Integer -> ScriptM
 pushnum = push . BS.toStrict . encode
 
-dup :: ScriptM ()
+dup :: ScriptM
 dup = do
     val <- pop
     push val
     push val
 
-hash256 :: ScriptM ()
+hash256 :: ScriptM
 hash256 = do
     bs <- pop
     push $ Encoding.hash256 bs
 
-hash160 :: ScriptM ()
+hash160 :: ScriptM
 hash160 = do
     pubkey <- pop
     push $ Encoding.hash160 pubkey
 
-equalverify :: ScriptM ()
+equalverify :: ScriptM
 equalverify = do
     v1 <- pop
     v2 <- pop
     when (v1 /= v2) $ throwError "opEqualVerify fails"
 
-checksig :: ScriptM ()
+checksig :: ScriptM
 checksig = do
     z <- gets envZ
     pubkey <- pop
@@ -201,7 +202,7 @@ checksig = do
     else
         pushnum 0
 
-checkmultisig :: ScriptM ()
+checkmultisig :: ScriptM
 checkmultisig = do
 
     pubkeys <- popnum >>= \n -> popn n
@@ -213,7 +214,7 @@ checkmultisig = do
 
     go z pubkeys sigs
     where
-        go :: Integer -> [BS.ByteString] -> [BS.ByteString] -> ScriptM ()
+        go :: Integer -> [BS.ByteString] -> [BS.ByteString] -> ScriptM
         go _ [] _  = pushnum 1
         go _ _  [] = pushnum 0
         go z keys@(k:ks) (s:ss)
@@ -221,7 +222,7 @@ checkmultisig = do
             | otherwise    = go z keys ss
 
 -- | evalcmd evaluates Command to the specific scriptM monad operation.
-evalcmd :: Command -> ScriptM ()
+evalcmd :: Command -> ScriptM
 
 evalcmd OP_1NEGATE       = undefined
 
@@ -250,7 +251,7 @@ evalcmd OP_HASH160       = hash160
 evalcmd OP_CHECKSIG      = checksig
 evalcmd OP_CHECKMULTISIG = checkmultisig
 
-evalscript :: Script -> ScriptM ()
+evalscript :: Script -> ScriptM
 evalscript (Script cmds) = forM_ cmds evalcmd
 
 p2pkhPubkey :: Value -> Script

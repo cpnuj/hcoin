@@ -32,10 +32,8 @@ executable hcoin
     containers,
     aeson,
     text,
-    servant,
-    servant-client,
     http-client,
-    http-client-tls,
+    http-conduit,
     lens,
     wide-word,
     HUnit
@@ -100,10 +98,8 @@ library
     containers,
     aeson,
     text,
-    servant,
-    servant-client,
     http-client,
-    http-client-tls,
+    http-conduit,
     lens,
     wide-word
   default-language:

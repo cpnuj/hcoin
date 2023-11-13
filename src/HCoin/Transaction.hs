@@ -1,48 +1,156 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeOperators     #-}
 
 module HCoin.Transaction where
 
-import Crypto.ECDSA
-import Data.Binary (encode, decode)
-import Data.Encoding
-import Numeric.Positive
-import HCoin.Data.Script
-import HCoin.Data.Transaction
-
 import Control.Lens
-
 import Control.Monad.State
+import Control.Applicative
 
-import qualified Data.ByteString       as BS
-import qualified Data.ByteString.Char8 as BSCH
-import qualified Data.Map              as M
-import qualified HCoin.BlockCypherAPI  as API
+import Crypto.ECDSA
 
-type TxnFetcherT = StateT (M.Map TxnID Txn) IO
+import Data.Aeson hiding (encode, decode)
+import Data.Binary
+import Data.Binary.Get
+import Data.Binary.Put
+import Data.Encoding
+
+import Network.HTTP.Simple
+import Numeric.Positive
+import HCoin.Data.Binary
+import HCoin.Data.Script
+
+import qualified Data.Map       as M
+
+import qualified Data.ByteString        as BS
+import qualified Data.ByteString.Char8  as BC
+import qualified Data.ByteString.Base16 as Hex
+import Data.Either (fromRight)
+
+getScript :: Get Script
+getScript = decode . BS.fromStrict <$> getVarBytes
+
+putScript :: Script -> Put
+putScript = putVarBytes . BS.toStrict . encode
+
+type TxnID = BS.ByteString
+
+data TxnIn = TxnIn
+    { _prevTxnID  :: TxnID
+    , _prevTxnIdx :: Word32
+    , _scriptSig  :: Script
+    , _sequence   :: Word32
+    }
+    deriving Show
+
+makeLenses ''TxnIn
+
+instance Binary TxnIn where
+
+    put (TxnIn previd idx sig seqn) = do
+        putByteString (BS.reverse rawid)
+        putWord32le idx
+        putScript sig
+        putWord32le seqn
+        where rawid = fromRight "" (Hex.decode previd)
+
+    get = TxnIn
+      <$> (Hex.encode . BS.reverse <$> getByteString 32)
+      <*> getWord32le
+      <*> getScript
+      <*> getWord32le
+
+data TxnOut = TxnOut
+    { _amount       :: Word64
+    , _scriptPubKey :: Script
+    }
+    deriving Show
+
+makeLenses ''TxnOut
+
+instance Binary TxnOut where
+    put (TxnOut amt pubkey) = putWord64le amt >> putScript pubkey
+    get = TxnOut <$> getWord64le <*> getScript
+
+data Txn = Txn
+    { _txnVersion  :: Word32
+    , _txnInputs   :: [TxnIn]
+    , _txnOutputs  :: [TxnOut]
+    , _txnLocktime :: Word32
+    }
+    deriving Show
+
+makeLenses ''Txn
+
+instance Binary Txn where
+    put (Txn ver inputs outputs locktime) = do
+        putWord32le ver
+        putList' inputs
+        putList' outputs
+        putWord32le locktime
+
+    get = Txn <$> getWord32le
+              <*> (getVarint >>= \n -> getN n)
+              <*> (getVarint >>= \n -> getN n)
+              <*> getWord32le
+
+appendInput :: Txn -> TxnIn -> Txn
+appendInput txn txnin = over txnInputs (++ [txnin]) txn
+
+appendOutput :: Txn -> TxnOut -> Txn
+appendOutput txn txnout = over txnOutputs (++ [txnout]) txn
+
+txnEmptyV1 :: Txn
+txnEmptyV1 = Txn 1 [] [] 0
+
+newtype TxnResponse = TxnResponse { hex :: String } deriving Show
+
+instance FromJSON TxnResponse where
+    parseJSON (Object v) = TxnResponse <$> v .: "hex"
+    parseJSON _ = empty
+
+data TxnFetcher = TxnFetcher
+    { _fetchCache   :: M.Map TxnID Txn
+    , _fetchTestnet :: Bool
+    }
+
+makeLenses ''TxnFetcher
+
+type TxnFetcherT = StateT TxnFetcher IO
+
+fetchTxnResp :: Bool -> TxnID -> IO Txn
+fetchTxnResp testnet txnid = do
+
+    -- https://api.blockcypher.com/v1/btc/test3/txs/18bc926d5c9824d9c5b0adc6718e8b1e28c028686a763be124f145e7b1003973?limit=50&includeHex=true
+    let api = baseapi testnet <> BC.unpack txnid <> "?limit=50&includeHex=true"
+
+    request  <- parseRequest api
+    response <- httpJSON request
+
+    let TxnResponse payload = getResponseBody response 
+
+    return $ decode . BS.fromStrict . BC.pack $ payload
+
+    where baseapi True  = "https://api.blockcypher.com/v1/btc/test3/txs/"
+          baseapi False = "https://api.blockcypher.com/v1/btc/main/txs/"
 
 fetchTxn :: TxnID -> TxnFetcherT Txn
 fetchTxn txnid = do
-    -- fetch txn by txn id from api, and store result in state map
-    let fetch :: TxnFetcherT Txn
-        fetch = do
-            txn <- liftIO $ fetchTxnByAPI txnid
-            modify (M.insert txnid txn)
+    fetcher <- gets id
+    case preview (fetchCache . ix txnid) fetcher of
+        Just i -> return i
+        Nothing -> do
+            txn <- liftIO $ fetchTxnResp (fetcher ^. fetchTestnet) txnid
+            modify $ \fetcher' -> set (fetchCache . ix txnid) txn fetcher'
             return txn
 
-    r <- gets (M.lookup txnid)
-    maybe fetch return r
-
 fetchTxnHex :: TxnID -> TxnFetcherT Txn
-fetchTxnHex = fetchTxn . hexEncode
-
-fetchTxnOut :: TxnID -> Int -> TxnFetcherT TxnOut
-fetchTxnOut txnid idx = (!! idx) . _txnOutputs <$> fetchTxn txnid
+fetchTxnHex = undefined
 
 fetchTxnOutHex :: TxnID -> Int -> TxnFetcherT TxnOut
-fetchTxnOutHex txnid = fetchTxnOut (hexEncode txnid)
-
-fetchTxnByAPI :: TxnID -> IO Txn
-fetchTxnByAPI = API.fetchTxn . BSCH.unpack
+fetchTxnOutHex = undefined
 
 sighashAll :: BS.ByteString
 sighashAll = hexDecode "01000000"
@@ -51,7 +159,7 @@ sighashAll = hexDecode "01000000"
 sighash :: Txn -> Int -> TxnFetcherT Integer
 sighash txn idx = do
     let txnin = _txnInputs txn !! idx
-    prevtxn <- fetchTxnHex (_prevTxnID txnin)
+    prevtxn <- fetchTxnHex (txnin ^. prevTxnID)
     let utxo = _txnOutputs prevtxn !! fromIntegral (_prevTxnIdx txnin)
     let pubkey = _scriptPubKey utxo
 
@@ -87,6 +195,7 @@ verifyInput txn idx = do
         Left e -> liftIO (print e) >> return False
         _ -> return True
 
+{-
 testCache :: M.Map TxnID Txn
 testCache = M.singleton "18bc926d5c9824d9c5b0adc6718e8b1e28c028686a763be124f145e7b1003973" (Txn 1 [] [txnout1, txnout2] 0)
     where txnout1 = TxnOut 1295632 (decode. BS.fromStrict . hexDecode $ "76a914321b3b6248602f862249abdde4bdcc5aacde79c188ac")
@@ -120,3 +229,4 @@ testSignInput = do
         txn = decode . BS.fromStrict $ hexDecode "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d00000000ffffffff02408af701000000001976a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f291623eddf88ac00000000"
     (txn', _) <- runStateT (signInput sec txn 0) M.empty
     return txn'
+-}
