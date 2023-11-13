@@ -1,5 +1,5 @@
 module Crypto.ECDSA
-    ( mkSecKey, genPubkey, sign, signk, verify
+    ( mkSecKey, genPubkey, sign, signk, verify, verify_
     , encodePubKey, decodePubKey
     , genWallet, genAddress, h160FromAddress
     , SecKey (..), PubKey (..), CompressedPubKey(..), Signature (..)
@@ -14,7 +14,9 @@ import Data.ByteString (ByteString)
 import Data.Binary.Put
 import Data.WideWord
 import Numeric.Positive
-import qualified Data.ByteString as BS
+
+import qualified Data.ByteString      as BS
+import qualified Data.ByteString.Lazy as LBS
 
 -- | SEC_p256k1 curve
 curve :: Curve
@@ -136,8 +138,8 @@ signk k (SecKey e) z = case pscale curve k pbase of
               k_inv = finv n k
 
 -- | verify signature and pubkey
-verify :: PubKey -> Integer -> Signature -> Bool
-verify (PubKey x y) z (Signature r s) =
+verify_ :: Integer -> PubKey -> Signature -> Bool
+verify_ z (PubKey x y) (Signature r s) =
     let dvd = fdiv n
         p   = Point x y
         u   = z `dvd` s
@@ -147,6 +149,9 @@ verify (PubKey x y) z (Signature r s) =
     in case padd curve ug vp of
         PZero -> False
         Point r' _ -> r' == r
+
+verify :: Integer -> ByteString -> ByteString -> Bool
+verify z pubkey sig = verify_ z (decodePubKey pubkey) (decode . BS.fromStrict $ sig)
 
 mkSecKey :: Integer -> SecKey
 mkSecKey = SecKey . (`mod` n)
