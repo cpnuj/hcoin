@@ -1,2 +1,0 @@
-module HCoin.BlockCypherAPI where
-

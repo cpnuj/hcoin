@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
-module HCoin.Data.Script
+module HCoin.Script
     ( Command(..) , Script(..)
     , p2pkhSig, p2pkhPubkey
     , runScript

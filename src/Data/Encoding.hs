@@ -12,10 +12,14 @@ import Numeric (showIntAtBase)
 import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Crypto.Hash.RIPEMD160 as RIPEMD160
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy  as LBS
 
 -- | Double sha256 hash
 hash256 :: ByteString -> ByteString
 hash256 = SHA256.hash . SHA256.hash
+
+hash256lazy :: LBS.ByteString -> LBS.ByteString
+hash256lazy = BS.fromStrict . SHA256.hash . SHA256.hash . BS.toStrict
 
 -- | sha256 followed by ripemd160 hash
 hash160 :: ByteString -> ByteString
