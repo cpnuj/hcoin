@@ -28,8 +28,9 @@ import HCoin.Script
 import HCoin.Data.Binary
 
 import qualified Data.ByteString             as BS
-import qualified Data.ByteString.Lazy        as LBS
 import qualified Data.ByteString.Char8       as BC
+import qualified Data.ByteString.Lazy        as LBS
+import qualified Data.ByteString.Lazy.Char8  as LBC
 import qualified Data.ByteString.Base16      as Hex
 import qualified Data.ByteString.Base16.Lazy as HexL
 
@@ -90,7 +91,7 @@ data Txn = Txn
 makeLenses ''Txn
 
 setMainnet :: Txn -> Txn
-setMainnet = set txnTestnet True
+setMainnet = set txnTestnet False
 
 instance Binary Txn where
 
@@ -118,10 +119,10 @@ txnEmptyV1 :: Txn
 txnEmptyV1 = Txn 1 [] [] 0 True
 
 -- | TxnResponse defines the response data of blockcypher transaction query api.
-newtype TxnResponse = TxnResponse { hex :: String } deriving Show
+newtype TxnResponse = TxnResponse { hex :: LBS.ByteString } deriving Show
 
 instance FromJSON TxnResponse where
-    parseJSON (Object v) = TxnResponse <$> v .: "hex"
+    parseJSON (Object v) = TxnResponse . LBC.pack <$> v .: "hex"
     parseJSON _ = empty
 
 -- | fetchTxn fetch txn info by txn id from blockcypher api.
@@ -140,9 +141,9 @@ fetchTxn testnet txnid = do
     request  <- parseRequest api
     response <- httpJSON request
 
-    let TxnResponse payload = getResponseBody response 
+    let TxnResponse payload = getResponseBody response
 
-    return $ decode . BS.fromStrict . BC.pack $ payload
+    return $ decode . fromRight "" . HexL.decode $ payload
 
     where baseapi True  = "https://api.blockcypher.com/v1/btc/test3/txs/"
           baseapi False = "https://api.blockcypher.com/v1/btc/main/txs/"

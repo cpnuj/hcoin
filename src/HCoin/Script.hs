@@ -33,6 +33,7 @@ data Command
     | OP_13 | OP_14 | OP_15 | OP_16
     | OP_PUSH Value
     | OP_DUP
+    | OP_EQUAL
     | OP_EQUALVERIFY
     | OP_HASH160
     | OP_CHECKSIG
@@ -73,6 +74,7 @@ instance Binary Command where
     put OP_16             = putWord8 0x60
 
     put OP_DUP            = putWord8 0x76
+    put OP_EQUAL          = putWord8 0x87
     put OP_EQUALVERIFY    = putWord8 0x88
     put OP_HASH160        = putWord8 0xa9
 
@@ -114,11 +116,13 @@ instance Binary Command where
            | op == 0x60 = return OP_16
 
            | op == 0x76 = return OP_DUP
+           | op == 0x87 = return OP_EQUAL
            | op == 0x88 = return OP_EQUALVERIFY
            | op == 0xa9 = return OP_HASH160
            | op == 0xac = return OP_CHECKSIG
+           | op == 0xae = return OP_CHECKMULTISIG
 
-           | otherwise = error "invalid opcode"
+           | otherwise = error $ "invalid opcode " <> show op
 
 -- | Script represents a smart contract consisting of many commands.
 newtype Script = Script [Command] deriving Show
@@ -246,6 +250,7 @@ evalcmd OP_16            = undefined
 evalcmd (OP_PUSH v)      = push v
 
 evalcmd OP_DUP           = dup
+evalcmd OP_EQUAL         = undefined
 evalcmd OP_EQUALVERIFY   = equalverify
 evalcmd OP_HASH160       = hash160
 evalcmd OP_CHECKSIG      = checksig
