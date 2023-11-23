@@ -1,7 +1,5 @@
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE TypeOperators     #-}
 
 module HCoin.Transaction where
 
@@ -200,76 +198,11 @@ verifyInput txn idx = do
         Left e -> liftIO (print e) >> return False
         _      -> return True
 
-{-
--- | TxnFetcher provides a cache to store known transactions.
-data TxnFetcher = TxnFetcher
-    { _fetchCache   :: M.Map TxnID Txn
-    , _fetchTestnet :: Bool
-    }
-
-makeLenses ''TxnFetcher
-
-type TxnFetcherT = StateT TxnFetcher IO
-
--- | fetchTxn can fetch transactions in the TxnFetcherT monad.
---   The given TxnID shoule be hex format.
-fetchTxn :: TxnID -> TxnFetcherT Txn
-fetchTxn txnid = do
-    fetcher <- gets id
-
-    case preview (fetchCache . ix txnid) fetcher of
-
-        -- hits cache
-        Just i -> return i
-
-        -- cache miss, fetch txn from blockcypher and store at cache
-        Nothing -> do
-            txn <- liftIO $ fetchTxnResp (fetcher ^. fetchTestnet) txnid
-            modify $ fetchCache . ix txnid .~ txn
-            return txn
-
--- | fetchTxnOut fetch txn output by given Txn and idx of txnInputs
-fetchTxnOut :: Txn -> Int -> TxnFetcherT TxnOut
-fetchTxnOut txn idx = do
-    prevtxn <- fetchTxn (txnin ^. prevTxnID)
-    return $ prevtxn ^. txnOutputs ^? ix previdx ^. to fromJust
-    where
-        txnin   = txn   ^. txnInputs  ^? ix idx ^. to fromJust
-        previdx = txnin ^. prevTxnIdx .  to fromIntegral
-
-testCache :: M.Map TxnID Txn
-testCache = M.singleton "18bc926d5c9824d9c5b0adc6718e8b1e28c028686a763be124f145e7b1003973" (Txn 1 [] [txnout1, txnout2] 0)
-    where txnout1 = TxnOut 1295632 (decode. BS.fromStrict . hexDecode $ "76a914321b3b6248602f862249abdde4bdcc5aacde79c188ac")
-          txnout2 = TxnOut 13931 (decode. BS.fromStrict . hexDecode $ "76a914bfdbfedde9cd85734e1fa1cedbd74f29fb72ff9c88ac")
-
-testTxn :: Txn
-testTxn = txn''
-    where
-        txnin = TxnIn
-            (hexDecode "18bc926d5c9824d9c5b0adc6718e8b1e28c028686a763be124f145e7b1003973")
-            1 (Script []) 0
-        txnout1 = TxnOut 10000 (p2pkhPubkey $ h160FromAddress "mk1Kb2FJuJ9yvPQY3V6yeCgxR5eQNrVGnw")
-        txnout2 = TxnOut 3000  (p2pkhPubkey $ h160FromAddress "my1QuFguxa5qMS3Ratpwan789R23dHpQee")
-
-        txn   = appendInput txnEmptyV1 txnin
-        txn'  = appendOutput txn txnout1
-        txn'' = appendOutput txn' txnout2
-
-testSighash :: IO Integer
-testSighash = do
-    let f :: TxnFetcherT Integer
-        f = do txn <- fetchTxn "452c629d67e41baec3ac6f04fe744b4b9617f8f859c63b3002f8684e7a4fee03"
-               sighash txn 0
-    (i, _) <- runStateT f M.empty
-    return i
-
-testSignInput :: IO Txn
-testSignInput = do
-    let sec = SecKey 8675309
-    let txn :: Txn
-        txn = decode . BS.fromStrict $ hexDecode "010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d00000000ffffffff02408af701000000001976a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f291623eddf88ac00000000"
-    (txn', _) <- runStateT (signInput sec txn 0) M.empty
-    return txn'
-
--}
+-- | isCoinbase checks the transaction is a coinbase transaction or not.
+isCoinbase :: Txn -> Bool
+isCoinbase txn = txn ^. txnInputs . to length == 1
+              && input ^. prevTxnID  == BS.replicate 32 0
+              && input ^. prevTxnIdx == 0xffffff
+              where
+                 input = txn ^. txnInputs ^? ix 0 ^. to fromJust
 
