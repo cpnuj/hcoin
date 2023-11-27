@@ -71,6 +71,7 @@ library
                         HCoin.Data.Binary
 
                         HCoin.Block
+                        HCoin.Network
                         HCoin.Script
                         HCoin.Transaction
 
