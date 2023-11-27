@@ -24,6 +24,7 @@ executable hcoin
                       , base16-bytestring
                       , bytestring
                       , binary
+                      , Decimal
 
                       , mtl
                       , lens
@@ -78,6 +79,7 @@ library
                       , base16-bytestring
                       , bytestring
                       , binary
+                      , Decimal
 
                       , mtl
                       , lens
